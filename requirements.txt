@@ -2,4 +2,5 @@ SQLAlchemy
 faker
 pandas
 h3
+psycopg
 pymysql
