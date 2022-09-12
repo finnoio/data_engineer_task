@@ -4,24 +4,26 @@ from time import sleep
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, BigInteger, DateTime
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.engine.mock import MockConnection
+from sqlalchemy.engine import Engine
 import pandas as pd
 from h3 import point_dist
 
 
-def extract_increment(psql_conn: MockConnection, current_ts: str):
-    increment_query = f"""
-        select device_id,
-           temperature,
-           location,
-           to_timestamp(time::int) as event_dt
-        from devices
-        where to_timestamp(time::int)
-         between '{current_ts}'::timestamp - interval '59 minutes 59 seconds'
-          and '{current_ts}'::timestamp
-        order by time
-    """
-    return pd.read_sql(increment_query, psql_conn)
+def extract_increment(psql_engine: Engine, current_ts: str):
+    with psql_engine.begin() as connection:
+        increment_query = f"""
+            select device_id,
+               temperature,
+               location,
+               to_timestamp(time::int) as event_dt
+            from devices
+            where to_timestamp(time::int)
+             between '{current_ts}'::timestamp - interval '59 minutes 59 seconds'
+              and '{current_ts}'::timestamp
+            order by time
+        """
+        increment = pd.read_sql(increment_query, connection)
+    return increment
 
 
 def transform_increment(increment_df: pd.DataFrame, current_ts: datetime) -> pd.DataFrame:
@@ -44,10 +46,10 @@ def transform_increment(increment_df: pd.DataFrame, current_ts: datetime) -> pd.
     return increment_df
 
 
-def load_increment(increment_df: pd.DataFrame, current_ts: str, mysql_engine: MockConnection) -> int :
+def load_increment(increment_df: pd.DataFrame, current_ts: str, mysql_engine: Engine) -> int:
     with mysql_engine.begin() as connection:
         # delete previously loaded data for idempotency
-        mysql_conn.execute(f"""
+        connection.execute(f"""
             delete
             from devices_agg_data
             where extract_dt
@@ -92,12 +94,12 @@ if __name__ == '__main__':
         except OperationalError:
             sleep(0.1)
     print('Connection to PostgresSQL/MySQL successful.', flush=True)
-    mysql_conn, psql_conn = mysql_engine.connect(), psql_engine.connect()
     current_ts = datetime.now().replace(second=0, microsecond=0, minute=0)
     while True:
-        if datetime.now() == current_ts + timedelta(hours=1):
-            current_ts += timedelta(hours=1)
-            increment_df = extract_increment(psql_conn, str(current_ts))
+        next_ts = current_ts + timedelta(hours=1)
+        if datetime.now() > next_ts:
+            current_ts = next_ts
+            increment_df = extract_increment(psql_engine, str(current_ts))
             print(f'Increment received, current timestamp = {current_ts}', flush=True)
 
             transformed_increment = transform_increment(increment_df, current_ts)
