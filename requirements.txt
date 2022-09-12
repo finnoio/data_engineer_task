@@ -2,6 +2,4 @@ SQLAlchemy
 faker
 pandas
 h3
-tabulate
-psycopg2-binary
 pymysql
