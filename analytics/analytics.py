@@ -69,48 +69,39 @@ def calculate_distance(location: str, location_lead: str) -> int:
 
 
 
-# if __name__ == '__main__':
-print('Waiting for the data generator...')
-sleep(20)
-print('ETL Starting...')
-# # TODO: remove
-# import os
-# os.environ['TZ'] = 'UTC'
-# # TODO: remove
+if __name__ == '__main__':
+    print('Waiting for the data generator...', flush=True)
+    sleep(20)
+    print('ETL Starting...', flush=True)
 
-while True:
-    try:
-        psql_engine = create_engine(environ["POSTGRESQL_CS"], pool_pre_ping=True, pool_size=10)
-        mysql_engine = create_engine(environ["MYSQL_CS"], pool_pre_ping=True, pool_size=10)
-        metadata_obj = MetaData()
-        devices_agg_data = Table(
-            'devices_agg_data', metadata_obj,
-            Column('device_id', String(40)),
-            Column('max_temperature', Integer),
-            Column('data_point_cnt', Integer),
-            Column('total_distance_km', BigInteger),
-            Column('extract_dt', DateTime),
-        )
-        metadata_obj.create_all(mysql_engine)
-        # psql_engine = create_engine('postgresql+psycopg2://postgres:password@localhost:6543/main', pool_pre_ping=True, pool_size=10)
-        # mysql_engine = create_engine('mysql+pymysql://nonroot:nonroot@localhost:3306/analytics?charset=utf8', pool_pre_ping=True, pool_size=10)
-        break
-    except OperationalError:
-        sleep(0.1)
-print('Connection to PostgresSQL/MySQL successful.')
-mysql_conn, psql_conn = mysql_engine.connect(), psql_engine.connect()
-current_ts = datetime.now() #.replace(second=0, microsecond=0, minute=0)
-while True:
-    if datetime.now() == current_ts + timedelta(minutes=5):
-        current_ts += timedelta(minutes=5)
-        increment_df = extract_increment(psql_conn, str(current_ts))
-        print(f'Increment received, current timestamp = {current_ts}')
+    while True:
+        try:
+            psql_engine = create_engine(environ["POSTGRESQL_CS"], pool_pre_ping=True, pool_size=10)
+            mysql_engine = create_engine(environ["MYSQL_CS"], pool_pre_ping=True, pool_size=10)
+            metadata_obj = MetaData()
+            devices_agg_data = Table(
+                'devices_agg_data', metadata_obj,
+                Column('device_id', String(40)),
+                Column('max_temperature', Integer),
+                Column('data_point_cnt', Integer),
+                Column('total_distance_km', BigInteger),
+                Column('extract_dt', DateTime),
+            )
+            metadata_obj.create_all(mysql_engine)
+            break
+        except OperationalError:
+            sleep(0.1)
+    print('Connection to PostgresSQL/MySQL successful.', flush=True)
+    mysql_conn, psql_conn = mysql_engine.connect(), psql_engine.connect()
+    current_ts = datetime.now().replace(second=0, microsecond=0, minute=0)
+    while True:
+        if datetime.now() == current_ts + timedelta(hours=1):
+            current_ts += timedelta(hours=1)
+            increment_df = extract_increment(psql_conn, str(current_ts))
+            print(f'Increment received, current timestamp = {current_ts}', flush=True)
 
-        transformed_increment = transform_increment(increment_df, current_ts)
-        print(f'Increment transformed successfully')
-        print(f'Increment load starting...')
-        inserted_rows = load_increment(transformed_increment, str(current_ts), mysql_engine)
-        print(f'Increment load finished, inserted rows: {inserted_rows}')
-
-
-        # print(tabulate.tabulate(transformed_increment.sort_values(by=['device_id'], ascending=True), headers='keys', tablefmt='psql'))
+            transformed_increment = transform_increment(increment_df, current_ts)
+            print(f'Increment transformed successfully', flush=True)
+            print(f'Increment load starting...', flush=True)
+            inserted_rows = load_increment(transformed_increment, str(current_ts), mysql_engine)
+            print(f'Increment load finished, inserted rows: {inserted_rows}', flush=True)
